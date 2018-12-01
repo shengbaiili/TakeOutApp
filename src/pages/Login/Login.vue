@@ -20,7 +20,7 @@
               </button>
             </section>
             <section class="login_verification">
-              <input type="tel" maxlength="8" placeholder="验证码">
+              <input type="tel" maxlength="8" placeholder="验证码" v-model="code">
             </section>
             <section class="login_hint">
               温馨提示：未注册硅谷外卖帐号的手机号，登录时将自动注册，且代表已同意
@@ -30,22 +30,22 @@
           <div :class="{on: !loginWay}">
             <section>
               <section class="login_message">
-                <input type="tel" maxlength="11" placeholder="手机/邮箱/用户名">
+                <input type="tel" maxlength="11" placeholder="手机/邮箱/用户名" v-model="name">
               </section>
               <section class="login_verification">
-                <input :type="isShowPwd ? 'text' : 'password'" maxlength="8" placeholder="密码">
+                <input :type="isShowPwd ? 'text' : 'password'" maxlength="8" placeholder="密码" v-model="pwd">
                 <div class="switch_button" @click="isShowPwd=!isShowPwd" :class="isShowPwd ? 'on' : 'off'" >
                   <div class="switch_circle" :class="{right: isShowPwd}"></div>
                   <span class="switch_text">{{isShowPwd ? 'abc' : ''}}</span>
                 </div>
               </section>
               <section class="login_message">
-                <input type="text" maxlength="11" placeholder="验证码">
+                <input type="text" maxlength="11" placeholder="验证码" v-model="captcha">
                 <img ref="captcha" @click="updateCaptcha" class="get_verification" src="http://localhost:5000/captcha" alt="captcha">
               </section>
             </section>
           </div>
-          <button class="login_submit">登录</button>
+          <button class="login_submit" @click.prevent="login">登录</button>
         </form>
         <a href="javascript:;" class="about_us">关于我们</a>
       </div>
@@ -57,14 +57,20 @@
 </template>
 
 <script>
-  import {reqSendCode} from '../../api'
+  import {Toast, MessageBox } from 'mint-ui'
+  import {reqSendCode, reqPwdLogin, reqSmsLogin} from '../../api'
+
   export default {
     data(){
       return{
         loginWay: true,
+        code: '',
         phone: '',
         computeTime: 0,
-        isShowPwd: false,
+        isShowPwd: true,
+        name: '',
+        pwd: '',
+        captcha: ''
       }
     },
     computed:{
@@ -77,17 +83,53 @@
         this.computeTime = 30
         const intervalId = setInterval(() =>{
           this.computeTime--
-          if(this.computeTime===0){
+          if(this.computeTime<=0){
+            this.computeTime = 0
             clearInterval(intervalId)
           }
         },1000)
 
         const result = await reqSendCode(this.phone)
         if(result.code===0){
-          alert('验证码已发送');
+          Toast('验证码已发送');
         }else{
           this.computeTime = 0
-          alert('发送验证码失败')
+          MessageBox.alert('发送验证码失败')
+        }
+      },
+
+      async login(){
+        const {code, phone, name, pwd, captcha, loginWay, isRightPhone} = this
+        let result
+        if (loginWay){
+          if (!isRightPhone){
+            return MessageBox.alert("手机号码不正确")
+          } else if (!/^\d{6}$/.test(code)) {
+            return MessageBox.alert("验证码必须是6位数字")
+          }
+          result = await reqSmsLogin(phone, code)
+          if(result.code!==0){
+            this.computeTime = 0
+          }
+        } else {
+          if(!name){
+            return MessageBox.alert("用户名必须指定")
+          } else if (!pwd){
+            return MessageBox.alert("密码必须指定")
+          }  else if (captcha.length!==4){
+            return MessageBox.alert("验证码必须指定4位")
+          }
+          result = await reqPwdLogin({name, pwd, captcha})
+          if(result.code!==0){
+            this.updateCaptcha()
+          }
+        }
+        if(result.code===0){
+          const user = result.data
+          this.$store.dispatch('saveUser', user)
+          this.$router.replace('/profile')
+        }else {
+          MessageBox.alert('登陆请求失败')
         }
       },
 
